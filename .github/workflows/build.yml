@@ -1,0 +1,20 @@
+name: Build kaeru for ruby
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi make python3 python3-pip
+      - name: Install python deps
+        run: pip3 install -r utils/requirements.txt
+      - name: Build
+        run: |
+          chmod +x build.sh
+          ./build.sh ruby lk_stock.img
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ruby-kaeru
+          path: ruby-kaeru.bin

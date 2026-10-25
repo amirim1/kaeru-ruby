@@ -1,0 +1,469 @@
+menu "Library Options"
+
+menu "Framebuffer Support"
+	config FRAMEBUFFER_SUPPORT
+		bool "Enable framebuffer library support"
+		default n
+		help
+		  Enable the framebuffer library for drawing graphics and text.
+		  This adds support for basic shapes, text rendering, and UI elements.
+
+		  Say Y unless you want to minimize binary size and don't need graphics.
+
+	if FRAMEBUFFER_SUPPORT
+
+	menu "Hardware Configuration"
+		config FRAMEBUFFER_ADDRESS
+			hex "Framebuffer base address"
+			default 0x7F528000
+			help
+			  Base address of the framebuffer in memory.
+			  This should be a valid memory address where the display
+			  controller expects to find the pixel data.
+
+		config FRAMEBUFFER_ALIGNMENT
+			int "Framebuffer row alignment (bytes)"
+			default 32
+			help
+			  Row alignment requirement for framebuffer.
+			  Common values: 32, 64, 128, 256
+			  64 bytes works for most MediaTek devices.
+	endmenu
+
+	menu "Display Properties"
+		config FRAMEBUFFER_WIDTH
+			int "Screen width in pixels"
+			default 800
+			help
+			  Width of the display in pixels.
+
+		config FRAMEBUFFER_HEIGHT
+			int "Screen height in pixels"
+			default 1280
+			help
+			  Height of the display in pixels.
+
+		config FRAMEBUFFER_BPP
+			int "Bits per pixel"
+			default 32
+			range 16 32
+			help
+			  Number of bits per pixel. Common values:
+			  16 - RGB565 format
+			  24 - RGB888 format
+			  32 - ARGB8888 format (recommended)
+
+		config FRAMEBUFFER_BYTES_PER_PIXEL
+			int
+			default 2 if FRAMEBUFFER_BPP = 16
+			default 3 if FRAMEBUFFER_BPP = 24
+			default 4 if FRAMEBUFFER_BPP = 32
+			help
+			  Calculated bytes per pixel based on BPP setting.
+			  This is used internally for buffer calculations.
+	endmenu
+
+	choice
+		prompt "Font selection"
+		default FONT_8X8_BASIC
+		help
+		  Select the font to use for text rendering.
+
+	config FONT_8X8_BASIC
+		bool "8x8 Basic Font (IBM PC Compatible)"
+		help
+		  Standard 8x8 pixel font with full ASCII support.
+		  Compatible with IBM PC character set.
+		  Size: ~1KB
+
+	config FONT_8X8_CALSTONE
+		bool "8x8 Calstone Font"
+		help
+		  Stylized 8x8 pixel font with better visual appeal.
+		  Good for retro/gaming aesthetic.
+		  Size: ~1KB
+
+	config FONT_8X8_COMIC_FANS
+		bool "8x8 Comic Fans Font"
+		help
+		  Comic-style 8x8 pixel font with playful appearance.
+		  Good for casual/fun interfaces.
+		  Size: ~1KB
+
+	endchoice
+
+	endif
+endmenu
+
+endmenu
+
+menu "Thread Support"
+    config THREAD_SUPPORT
+        bool "Create your own threads"
+        default n
+        help
+          Say Y if you want to create your own threads
+
+    config THREAD_CREATE_ADDRESS
+        hex "Thread create address"
+        depends on THREAD_SUPPORT
+        help
+          Address for thread creation function
+
+    config THREAD_RESUME_ADDRESS
+        hex "Thread resume address"
+        depends on THREAD_SUPPORT
+        help
+          Address for thread resume function
+endmenu
+
+menu "Fastboot Support"
+    menu "Fastboot Function Addresses"
+        choice
+            prompt "Fastboot response style"
+            default FASTBOOT_STYLE_STANDARD
+
+        config FASTBOOT_STYLE_STANDARD
+            bool "Standard (separate okay/fail/info)"
+
+        config FASTBOOT_STYLE_COMBINED
+            bool "Combined (send_response/send_info)"
+        endchoice
+
+        if FASTBOOT_STYLE_STANDARD
+            config FASTBOOT_FAIL_ADDRESS
+                hex "fastboot_fail() address"
+
+            config FASTBOOT_INFO_ADDRESS
+                hex "fastboot_info() address"
+
+            config FASTBOOT_OKAY_ADDRESS
+                hex "fastboot_okay() address"
+
+            config FASTBOOT_PUBLISH_ADDRESS
+                hex "fastboot_publish() address"
+
+            config FASTBOOT_REGISTER_ADDRESS
+                hex "fastboot_register() address"
+        endif
+
+        if FASTBOOT_STYLE_COMBINED
+            config FASTBOOT_SEND_RESPONSE_ADDRESS
+                hex "fastboot_send_response() address"
+
+            config FASTBOOT_SEND_INFO_ADDRESS
+                hex "fastboot_send_info() address"
+        endif
+    endmenu
+
+    config FASTBOOT_OEM_TABLE
+        bool "Register oem commands via the LK's in-memory command table"
+        depends on FASTBOOT_STYLE_COMBINED
+        default n
+        help
+          Say Y for customized LKs (e.g. Motorola) that keep their oem
+          commands in a fixed array with no register function.
+
+    if FASTBOOT_OEM_TABLE
+        config FASTBOOT_OEM_CMD_HEAD
+            hex "Command table head-pointer address"
+            default 0x0
+            help
+              Global holding the start pointer of the oem command array.
+
+        config FASTBOOT_OEM_CMD_TAIL
+            hex "Command table tail-pointer address"
+            default 0x0
+            help
+              Global holding the end pointer. Leave both at 0 to skip.
+    endif
+
+    config FASTBOOT_HELP_COMMAND
+        def_bool FASTBOOT_CMDLIST_ADDRESS != 0x0
+        depends on FASTBOOT_STYLE_STANDARD
+
+    config FASTBOOT_CMDLIST_ADDRESS
+        hex "fastboot command list address"
+        default 0x0
+        depends on FASTBOOT_STYLE_STANDARD
+        help
+          Address of the global that fastboot_register() pushes each
+          registration onto, i.e. the head pointer of the bootloader's
+          fastboot command list.
+
+          Set it to enable 'fastboot oem help', which walks that list and
+          reports every oem command the bootloader answers to. Leave it at
+          0 if you have not located the global on your target.
+
+    config FASTBOOT_MEM_COMMAND
+        bool "Enable 'fastboot oem mem'"
+        default y
+        depends on FASTBOOT_STYLE_STANDARD
+        help
+          Say Y to register 'oem mem read <addr> [len]', which hexdumps
+          memory over fastboot, and 'oem mem write <addr> <value>', which
+          pokes a word into it.
+
+          Boards that want names as well as hex addresses can provide
+          mem_region_find() to resolve them.
+
+    config FASTBOOT_FETCH_COMMAND
+        bool "Enable 'fastboot fetch'"
+        default n
+        depends on FASTBOOT_STYLE_STANDARD && STORAGE_SUPPORT
+        help
+          Say Y to register 'fastboot fetch', which reads partitions
+          back to the host.
+
+    if FASTBOOT_FETCH_COMMAND
+        config FASTBOOT_USB_WRITE_ADDRESS
+            hex "usb_write() address"
+            help
+              Address of the function fastboot sends data to the host
+              with, the one 'download:' uses for its DATA reply.
+
+        config FASTBOOT_GETVAR_ADDRESS
+            hex "LK getvar handler address"
+            help
+              Address of the handler LK registers for 'getvar:'.
+    endif
+endmenu
+
+menu "Environment Support"
+    config ENVIRONMENT_SUPPORT
+        bool "Enable environment support"
+        default n
+        help
+          Say Y to enable get_env/set_env wrappers.
+          Required for features like bootloader lock spoofing.
+
+    if ENVIRONMENT_SUPPORT
+        config GET_ENV_ADDRESS
+            hex "get_env() address"
+            help
+              Address of the get_env() function in the bootloader
+
+        config SET_ENV_ADDRESS
+            hex "set_env() address"
+            help
+              Address of the set_env() function in the bootloader
+    endif
+endmenu
+
+menu "Spoof Support"
+    config SPOOF_SUPPORT
+        bool "Enable bootloader lock state spoofing"
+        default n
+        depends on ENVIRONMENT_SUPPORT
+        help
+          Common library for bootloader lock state spoofing.
+          Requires environment support to be enabled.
+endmenu
+
+menu "Recovery Support"
+    config RECOVERY_CMDLINE_PATCH
+        bool "Patch the kernel cmdline on recovery boot"
+        default n
+        depends on SPOOF_SUPPORT
+        help
+          Say Y to set androidboot.verifiedbootstate to orange when booting
+          into recovery. Without this, adbd and fastbootd see the spoofed
+          locked state, so adb access and flashing are both refused.
+
+    if RECOVERY_CMDLINE_PATCH
+        config RECOVERY_CMDLINE1_ADDRESS
+            hex "First cmdline buffer address"
+            help
+              Address of the kernel cmdline buffer in the bootloader
+
+        config RECOVERY_CMDLINE2_ADDRESS
+            hex "Second cmdline buffer address"
+            default 0x0
+            help
+              Address of the second cmdline buffer, if the image has one.
+              Leave at 0 otherwise.
+    endif
+endmenu
+
+menu "Storage Support"
+    config STORAGE_SUPPORT
+        bool "Enable storage support"
+        depends on !USE_PMT_PARTITION
+        default n
+        help
+          Support for reading and writing to storage.
+
+    config BLKDEV_HAS_BROKEN_UNALIGNED_ACCESS
+        bool "dev->read has broken unaligned accesses"
+        depends on USE_MT_PART_API || USE_LEGACY_PARTITION_API || STORAGE_SUPPORT
+        default n
+        help
+            Enable this if LK's implementation of dev->read does not handle
+            block-unaligned reads correctly.
+
+    config USE_PMT_PARTITION
+        bool "Use PMT partition table"
+        depends on USE_MT_PART_API
+        default n
+        help
+            Enable this if the device uses a PMT partition table
+            instead of GPT. This selects the correct part_t structure
+            layout returned by mt_part_get_partition(). PMT devices use
+            startblk/blknum while GPT devices use start_sect/nr_sects.
+
+    config MT_PART_GET_DEVICE_ADDRESS
+        hex "mt_part_get_device() address"
+        depends on USE_MT_PART_API || USE_LEGACY_PARTITION_API || STORAGE_SUPPORT
+
+    config MT_PART_GET_PARTITION_ADDRESS
+        hex "mt_part_get_partition() address"
+        depends on USE_MT_PART_API
+endmenu
+
+menu "Memory and Address Mapping"
+    menu "Bootloader Configuration"
+        config BOOTLOADER_BASE
+            hex "LK load address"
+            help
+              Base address where the LK bootloader is loaded in memory
+
+        config BOOTLOADER_SIZE
+            hex "LK size"
+            help
+              Size of the LK bootloader in memory
+
+        config BOOTMODE_ADDRESS
+            hex "Bootmode address"
+            help
+              Address where boot mode information is stored
+    endmenu
+
+    menu "Platform Function Addresses"
+        config PLATFORM_INIT_CALLER
+            hex "platform_init()'s caller address"
+            help
+              Address of the function that calls platform_init()
+
+        config PLATFORM_INIT_ADDRESS
+            hex "platform_init() address"
+            help
+              Address of the platform_init() function
+
+        config APP_ADDRESS
+            hex "app() address"
+            help
+              Address of the app() function
+
+        config MTK_DETECT_KEY_ADDRESS
+            hex "mtk_detect_key() address"
+            default 0x0
+            help
+              Address of the mtk_detect_key() function for key detection
+
+        config VIDEO_PRINTF_ADDRESS
+            hex "video_printf() address"
+            help
+              Address of the video_printf() function for display output
+    endmenu
+endmenu
+
+menu "Logging Options"
+    config LK_LOG_STORE
+        bool "Enable LK Log Store"
+        default y
+        help
+          Say Y to enable additional log storage mechanism.
+          This allows accessing bootloader logs from the running system.
+
+    config LK_LOG_STORE_ADDRESS
+        hex "LK Log Store Address"
+        depends on LK_LOG_STORE
+        help
+          Address of the lk_log_store() function in the bootloader
+endmenu
+
+menu "Third party / Miscellaneous libraries"
+    config SEJ_SUPPORT
+        bool "Enable libsej support"
+        default n
+        help
+          Say Y to enable libsej support, allowing to interact with
+          the device crypto engine.
+
+    config IDMELIB_SUPPORT
+        bool "Enable Amazon IDME (idmelib) support"
+        default n
+        help
+          Say Y to enable idmelib support, for reading and writing the
+          IDME block Amazon devices keep their per unit data in, such as
+          the serial number, board id and the fos/dev/usr flags.
+
+    config IDME_EMMC_PART
+        int "eMMC hardware partition the IDME block lives in"
+        depends on IDMELIB_SUPPORT
+        default 2
+        help
+          Which eMMC hardware area to read the IDME block from. MTK numbers
+          these from one, and Amazon normally uses the second boot area.
+
+    config AMZN_BCB_SUPPORT
+        bool "Enable Amazon BCB (bcblib) support"
+        default n
+        help
+          Say Y to enable bcblib, allowing boards to parse and edit the
+          slot metadata Amazon devices keep in /misc.
+
+          This is Amazon's own BCB format, not AOSP's bootloader_message,
+          so it is only useful on Amazon (Echo & friends) targets.
+    
+    config BOOTLOADER_MESSAGE_SUPPORT
+        bool "Enable AOSP bootloader_message support"
+        depends on STORAGE_SUPPORT
+        default n
+        help
+          Say Y here to enable AOSP bootloader_message support, allowing
+          boards to easily handle the standardized format if their stock
+          LKs either do not handle it properly or use an alternative method.
+
+    if BOOTLOADER_MESSAGE_SUPPORT
+        config MISC_PARTITION_NAME
+            string "Name of the misc partition"
+            default "misc"
+    endif
+endmenu
+
+menu "Image Patching"
+    config LK_SIGNATURE_SIZE
+        hex "Size of the signature appended to the LK image"
+        default 0x0
+        help
+          Size of the signature some vendors append to the LK image. It
+          counts towards the partition's data_size, so the image ends this
+          many bytes earlier. Leave at 0 if there is none.
+
+    config CERT_BYPASS
+        bool "Enable certificate bypass"
+        default n
+        help
+          Say Y to re-sign the partitions modified during injection so the
+          patched image passes the bootloader's certificate verification on
+          SBC enabled devices.
+
+          This has no effect on images that don't carry a cert2, so it is
+          safe to leave enabled.
+
+    config CERT_BYPASS_MODE
+        string "Certificate bypass strategy"
+        depends on CERT_BYPASS
+        default "override"
+        help
+          Forging strategy for the cert2: "override" (2026 variant) or
+          "wrap" (2023 variant). Older devices may need "wrap".
+
+    config LK_PART_HDR_NAME
+        string "Change the partition name of LK in the image header"
+        default ""
+        help
+          If set, name of LK in the image header will be changed to the
+          specified value.
+endmenu
